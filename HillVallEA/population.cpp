@@ -1,0 +1,328 @@
+/*
+
+HillVallEA
+
+By S.C. Maree
+s.c.maree[at]amc.uva.nl
+github.com/SCMaree/HillVallEA
+
+
+*/
+
+#include "population.hpp"
+#include "mathfunctions.hpp"
+
+namespace hillvallea
+{
+
+  // Constructor
+  population_t::population_t()
+  {
+
+  }
+  
+  // Destructor
+  population_t::~population_t() { }
+
+  // dimensions
+  //------------------------------------------
+  size_t population_t::size() const { return sols.size(); }
+  size_t population_t::problem_size() const { return sols[0]->param.size(); }
+  
+  // Population mean
+  void population_t::mean(vec_t & mean) const
+  {
+    // Compute the sample mean
+    //-------------------------------------------
+    // set the mean to zero.
+    mean.resize(problem_size());
+    mean.fill(0);
+    
+    for (auto sol = sols.begin(); sol != sols.end(); ++sol) {
+      mean += (*sol)->param;
+    }
+    
+    mean /= (double)sols.size();
+    
+  }
+  
+  // population covariance
+  void population_t::covariance(const vec_t & mean, matrix_t & covariance) const
+  {
+    // Compute the sample covariance
+    // use the maximum likelihood estimate (see e.g. wikipedia)
+    //-------------------------------------------
+    covariance.reset(problem_size(),problem_size(), 0.0);
+    
+    /* First do the maximum-likelihood estimate from data */
+    for(size_t i = 0; i < problem_size(); i++ )
+    {
+      for(size_t j = i; j < problem_size(); j++ )
+      {
+        for(size_t k = 0; k < sols.size(); k++ ) {
+          covariance[i][j] += (sols[k]->param[i] -mean[i])*(sols[k]->param[j]-mean[j]);
+        }
+        
+        covariance[i][j] /= (double) sols.size();
+      }
+    }
+    
+    for(size_t i = 0; i < problem_size(); i++ )
+      for(size_t j = 0; j < i; j++ )
+        covariance[i][j] = covariance[j][i];
+
+  }
+
+  // population covariance
+  void population_t::covariance_univariate(const vec_t & mean, matrix_t & covariance) const
+  {
+    // Compute the sample covariance
+    // use the maximum likelihood estimate (see e.g. wikipedia)
+    //-------------------------------------------
+    covariance.reset(problem_size(), problem_size(), 0.0);
+
+    /* First do the maximum-likelihood estimate from data */
+    for (size_t i = 0; i < problem_size(); i++)
+    {
+      for (size_t k = 0; k < sols.size(); k++) {
+        covariance[i][i] += (sols[k]->param[i] - mean[i])*(sols[k]->param[i] - mean[i]);
+      }
+
+      covariance[i][i] /= (double)sols.size();
+    }
+  }
+
+  // evalute the population
+  //-------------------------------------------------------------------------------------
+  int population_t::evaluate(const fitness_t * fitness_function, const size_t skip_number_of_elites)
+  {
+    for(size_t i = skip_number_of_elites; i < sols.size(); ++i) {
+      (*fitness_function)(*sols[i]);
+      // assert(isfinite(sols[i]->f));
+    }
+    
+    return ((int) (sols.size()-skip_number_of_elites));
+  }
+  
+  // Fill the given population by uniform initialization in the range [min,max),
+  // for all dimensions equal
+  //----------------------------------------------------------------------------------------
+  void population_t::fill_uniform(const size_t sample_size, const size_t problem_size, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng)
+ {
+    
+    // resize the solutions vector.
+    sols.resize(sample_size);
+    
+    // sample  solutions and evaluate them
+    for(size_t i = 0; i < sols.size(); ++i)
+    {
+      
+      // if the solution is not yet initialized, do it now.
+      if (sols[i] == nullptr)
+      {
+        solution_pt sol = std::make_shared<solution_t>(problem_size);
+        sols[i] = sol;
+      }
+      
+      // sample a new solution ...
+      sample_uniform(sols[i]->param, problem_size,lower_param_range,upper_param_range,rng);
+      
+    }
+  }
+
+  // Fill the given population by normal sampling
+  //-------------------------------------------------------------------------------------------------------------------------------
+  int population_t::fill_normal(const size_t sample_size, const size_t problem_size, const vec_t & mean, const matrix_t & MatrixRoot, const vec_t & lower_param_range, const vec_t & upper_param_range, const size_t number_of_elites, rng_pt rng)
+  {
+
+    // Resize the population vector
+    //--------------------------------------------
+    sols.resize(sample_size);
+
+    int number_of_samples = 0;
+
+    // for each sol in the pop, sample.
+    for (size_t i = 0; i < sols.size(); ++i)
+    {
+
+      // save the elite (if it is defined)
+      if (i < number_of_elites && sols[i] != nullptr)
+        continue;
+
+      // if the solution is not yet initialized, do it now.
+      if (sols[i] == nullptr)
+      {
+        solution_pt sol = std::make_shared<solution_t>(problem_size);
+        sols[i] = sol;
+      }
+
+      number_of_samples += sample_normal(sols[i]->param, problem_size, mean, MatrixRoot, lower_param_range, upper_param_range, rng);
+
+    }
+
+    return number_of_samples;
+  }
+
+
+  int population_t::fill_normal_univariate(const size_t sample_size, const size_t problem_size, const vec_t & mean, const matrix_t & cholesky, const vec_t & lower_param_range, const vec_t & upper_param_range, const size_t number_of_elites, rng_pt rng)
+  {
+
+    // Resize the population vector
+    //--------------------------------------------
+    sols.resize(sample_size);
+
+    int number_of_samples = 0;
+
+    // for each sol in the pop, sample.
+    for (size_t i = 0; i < sols.size(); ++i)
+    {
+
+      // save the elite (if it is defined)
+      if (i < number_of_elites && sols[i] != nullptr)
+        continue;
+
+      // if the solution is not yet initialized, do it now.
+      if (sols[i] == nullptr)
+      {
+        solution_pt sol = std::make_shared<solution_t>(problem_size);
+        sols[i] = sol;
+      }
+
+
+      number_of_samples += sample_normal_univariate(sols[i]->param, problem_size, mean, cholesky, lower_param_range, upper_param_range, rng);
+
+    }
+
+    return number_of_samples;
+  }
+
+  // Truncation selection (selection percentage)
+  // select the selection_percentage*population_size best individuals in the population
+  //-------------------------------------------------------------------------------------
+  void population_t::truncation_percentage(population_t & selection, double selection_percentage) const
+  {
+    
+    // Get the parent population size to compute the selection fraction.
+    // Then, call truncation by number.
+    truncation_size(selection,(size_t) (selection_percentage*sols.size()));
+    
+  }
+  
+  
+  // Truncation selection (selection size)
+  // select the selection_size best individuals in the population
+  // the population is already sorted.
+  //-------------------------------------------------------------------------------------
+  void population_t::truncation_size(population_t & selection, size_t selection_size) const
+  {
+    
+    selection.sols.resize(selection_size);
+    
+    // copy the pointers from the parents to the selection
+    std::copy(sols.begin(),sols.begin() + selection_size,selection.sols.begin());
+    
+  }
+  
+  // Add the solutions of another population to this one
+  //---------------------------------------------------------------------
+  void population_t::addSolutions(const population_t & pop)
+  {
+    this->sols.insert(this->sols.end(), pop.sols.begin(), pop.sols.end());
+  }
+  
+  // do we have improvement over the given objective value
+  // assumes a sorted population
+  //--------------------------------------------
+  bool population_t::improvement_over(const double objective) const
+  {
+    if (sols[0]->f < objective) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Sort the population such that best = first
+  //-------------------------------------------------------------------------------------
+  void population_t::sort_on_fitness() {
+    std::sort(sols.begin(),sols.end(),solution_t::better_solution_via_pointers);
+  }
+  
+  // Population Statistics
+  //--------------------------------------------------------------------
+  solution_pt population_t::first() const {
+
+    if (sols.size() < 1)
+      return nullptr;
+    else
+      return sols[0];
+  }
+  
+  solution_pt population_t::last() const {
+    if (sols.size() < 1)
+      return nullptr;
+    else
+      return sols[sols.size()-1];
+  }
+
+
+  // Average fitness of the population
+  //-------------------------------------------
+  double population_t::average_fitness() const
+  {
+    double average_fitness = 0.0;
+    
+    for (auto sol = sols.begin(); sol != sols.end(); ++sol) {
+      average_fitness += (*sol)->f;
+    }
+    
+    average_fitness /= size();
+    
+    return average_fitness;
+  }
+  
+  
+  double population_t::fitness_variance() const
+  {
+
+    double mean = 0;
+    double variance = 0;
+
+    for (auto sol = sols.begin(); sol != sols.end(); ++sol)
+      mean += (*sol)->f;
+
+    mean /= (sols.size());
+
+    for (auto sol = sols.begin(); sol != sols.end(); ++sol)
+      variance += ((*sol)->f - mean)*((*sol)->f - mean);
+
+    variance /= (sols.size());
+
+    return variance;
+
+  }
+
+  double population_t::relative_fitness_std() const
+  {
+
+    double mean = 0;
+    double variance = 0;
+
+    for (auto sol = sols.begin(); sol != sols.end(); ++sol)
+      mean += (*sol)->f;
+
+    mean /= (sols.size());
+
+    for (auto sol = sols.begin(); sol != sols.end(); ++sol)
+      variance += ((*sol)->f - mean)*((*sol)->f - mean);
+
+    variance /= (sols.size());
+
+    if (fabs(mean) <= 0)
+      return 0.0;
+    else
+      return sqrt(variance)/fabs(mean);
+
+  }
+
+}
