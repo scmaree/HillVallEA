@@ -21,6 +21,7 @@ github.com/SCMaree/HillVallEA
 #include <fstream>
 #include <iomanip>
 #include <functional>
+#include <memory>
 
 /*-=-=-=-=-=-=-=-=-=-=-=-=-=-= Section Constants -=-=-=-=-=-=-=-=-=-=-=-=-=-*/
 #ifndef PI
