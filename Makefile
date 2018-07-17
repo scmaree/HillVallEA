@@ -24,3 +24,6 @@ example_simple: example_simple.o $(HVEA_OBJ_FILES)
 
 clean:
 	rm -f $(CEC_OBJ_FILES) $(CEC_DEP_FILES) $(HVEA_OBJ_FILES) $(HVEA_DEP_FILES) *.d *.o
+
+clean_run:
+	rm -f example_cec2013_benchmark example_simple elites.dat statistics.dat

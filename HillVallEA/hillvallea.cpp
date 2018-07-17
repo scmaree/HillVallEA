@@ -500,8 +500,8 @@ namespace hillvallea
     // note: i init the univariate bandwidth base don the average edge length.. so this is correct here :)
     //------------------------------------------------
     std::vector<population_pt> clusters;
-    clustering(*selection, clusters, elitist_archive, init_univariate_bandwidth);
 
+    clustering(*selection, clusters, elitist_archive, init_univariate_bandwidth);
 
     // Init local optimizers
     //---------------------------------------------------------------------------
@@ -616,12 +616,18 @@ namespace hillvallea
 
           if (maximum_number_of_evaluations > 0 && number_of_evaluations + fevals_needed_to_check_elites + current_cluster_size >= maximum_number_of_evaluations) {
             restart = false;
+            if (local_optimizers[i]->pop->size() > 0) {
+              elite_candidates.push_back(local_optimizers[i]->pop->sols[0]);
+            }
             break;
           }
 
           // stop if we run out of time.
           if (terminate_on_runtime()) {
             restart = false;
+            if (local_optimizers[i]->pop->size() > 0) {
+              elite_candidates.push_back(local_optimizers[i]->pop->sols[0]);
+            }
             break;
           }
 
@@ -629,7 +635,7 @@ namespace hillvallea
           if (use_vtr && local_optimizers[i]->pop->sols[0]->f < vtr)
           {
             restart = false;
-            best = *pop->sols[0];
+            best = *local_optimizers[i]->pop->sols[0];
             success = true;
             break;
           }
@@ -713,8 +719,9 @@ namespace hillvallea
     }
 
     // sort the archive s.t. the best is first
-    // std::sort(elitist_archive.begin(), elitist_archive.end(), solution_t::better_solution_via_pointers);
-    best = *elitist_archive[0]; 
+    if(elitist_archive.size() > 0) {
+      best = *elitist_archive[0]; 
+    }
 
     // write the final solution(s)
     // only if we care to output anything. Else, write nothing 
