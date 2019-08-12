@@ -11,6 +11,7 @@ github.com/SCMaree/HillVallEA
 
 #include "population.hpp"
 #include "mathfunctions.hpp"
+#include "fitness.h"
 
 namespace hillvallea
 {
@@ -43,6 +44,24 @@ namespace hillvallea
     }
     
     mean /= (double)sols.size();
+    
+  }
+
+  // weighted Population mean
+  void population_t::weighted_mean(vec_t & mean, const vec_t & weights) const
+  {
+    // Compute the sample mean
+    //-------------------------------------------
+    // set the mean to zero.
+    assert(sols.size() == weights.size());
+    mean.resize(problem_size());
+    mean.fill(0);
+    
+    for (size_t i = 0; i < sols.size(); ++i) {
+      mean += weights[i] * sols[i]->param;
+    }
+    
+    // mean /= (double)sols.size();
     
   }
   
@@ -94,10 +113,10 @@ namespace hillvallea
 
   // evalute the population
   //-------------------------------------------------------------------------------------
-  int population_t::evaluate(const fitness_t * fitness_function, const size_t skip_number_of_elites)
+  int population_t::evaluate(const fitness_pt fitness_function, const size_t skip_number_of_elites)
   {
     for(size_t i = skip_number_of_elites; i < sols.size(); ++i) {
-      (*fitness_function)(*sols[i]);
+      fitness_function->evaluate(*sols[i]);
       // assert(isfinite(sols[i]->f));
     }
     
@@ -130,6 +149,127 @@ namespace hillvallea
     }
   }
 
+  void population_t::fill_greedy_uniform(const size_t sample_size, const size_t problem_size, double sample_ratio, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng)
+  {
+    
+    // resize the solutions vector.
+    sols.resize((size_t) (sample_ratio * sample_size));
+    
+    // sample  solutions and evaluate them
+    for(size_t i = 0; i < sols.size(); ++i)
+    {
+      
+      // if the solution is not yet initialized, do it now.
+      if (sols[i] == nullptr) {
+        sols[i] = std::make_shared<solution_t>(problem_size);
+      }
+      
+      // sample a new solution ...
+      sample_uniform(sols[i]->param, problem_size,lower_param_range,upper_param_range,rng);
+      
+    }
+    
+    if (sample_ratio > 1)
+    {
+      std::vector<solution_pt> new_sols;
+      selectSolutionsBasedOnParameterDiversity(sols, sample_size, new_sols, rng);
+      sols = new_sols;
+    }
+  }
+  
+  // reject samples of which the nearest d+1 solutions
+  void population_t::fill_with_rejection(const size_t sample_size, const size_t problem_size, double sample_ratio, const std::vector<solution_pt> & previous_sols, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng)
+  {
+    
+    // resize the solutions vector.
+    sols.resize((size_t) (sample_ratio * sample_size));
+    
+    vec_t dist(previous_sols.size(), 0.0);
+    
+    size_t number_of_nearest_neighbours = problem_size + 1;
+    
+    
+    std::uniform_real_distribution<double> unif(0, 1);
+    
+    // sample solutions and evaluate them
+    for(size_t i = 0; i < sols.size(); ++i)
+    {
+      
+      // if the solution is not yet initialized, do it now.
+      //if (sols[i] == nullptr) {
+        sols[i] = std::make_shared<solution_t>(problem_size);
+      //}
+      
+      // sample a new solution ...
+      sample_uniform(sols[i]->param, problem_size,lower_param_range,upper_param_range,rng);
+      
+      if(previous_sols.size() > 0 )
+      {
+        // for each solution, find the nearest solutions from the previous pop.
+        //-----------------------------------------------------------------------
+        size_t nearest_index = 0, furthest_index = 0;
+        for(size_t j = 0; j < previous_sols.size(); ++j)
+        {
+          dist[j] = sols[i]->param_distance(*previous_sols[j]);
+          
+          if (dist[j] < dist[nearest_index]) {
+            nearest_index = j;
+          }
+          
+          if (dist[j] > dist[furthest_index]) {
+            furthest_index = j;
+          }
+        }
+        
+        bool accept_sample = false;
+        int cluster_index = previous_sols[nearest_index]->cluster_number; // note, cluster_number == -1 if not in selection, but also count those!
+        
+        if(cluster_index == -1)
+        {
+          accept_sample = true;
+        }
+        else
+        {
+          for(size_t j = 1; j < number_of_nearest_neighbours; ++j)
+          {
+          
+            size_t old_nearest_index = nearest_index;
+            nearest_index = furthest_index;
+            
+            for (size_t k = 0; k < previous_sols.size(); k++) {
+              
+              if (dist[k] > dist[old_nearest_index] && dist[k] < dist[nearest_index]) {
+                nearest_index = k;
+              }
+            }
+            
+            if(cluster_index != previous_sols[nearest_index]->cluster_number) {
+              accept_sample = true;
+              break;
+            }
+
+          }
+        }
+        
+        // do not accept sample if all neighbours are from the same cluster
+        if(!accept_sample)
+        {
+          // reject sample
+          if(unif(*rng) > 0.1) {
+            i--;
+          }
+        }
+      }
+    }
+    
+    if (sample_ratio > 1)
+    {
+      std::vector<solution_pt> new_sols;
+      selectSolutionsBasedOnParameterDiversity(sols, sample_size, new_sols, rng);
+      sols = new_sols;
+    }
+  }
+  
   // Fill the given population by normal sampling
   //-------------------------------------------------------------------------------------------------------------------------------
   int population_t::fill_normal(const size_t sample_size, const size_t problem_size, const vec_t & mean, const matrix_t & MatrixRoot, const vec_t & lower_param_range, const vec_t & upper_param_range, const size_t number_of_elites, rng_pt rng)

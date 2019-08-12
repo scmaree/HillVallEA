@@ -9,11 +9,18 @@ The Hill-Valley Evolutionary Algorithm (HillVallEA) is a real-valued evolutionar
 > S.C. Maree, T. Alderliesten, D. Thierens, and P.A.N. Bosman. 
 > GECCO-2018, ACM Press, New York, New York, 2018.
 
-and benchmarked in the following technical report.
+and benchmarked in the following technical reports
 
 > **Benchmarking the Hill-Valley Evolutionary Algorithm for the GECCO 2018 Competition on Niching**
 >S.C. Maree, T. Alderliesten, D. Thierens, P.A.N. Bosman
 > arXiv preprint [arXiv:1807.00188](https://arxiv.org/abs/1807.00188), 2018.
+
+and
+
+> **Benchmarking HillVallEA for the GECCO 2019 Competition on Multimodal Optimization**
+>S.C. Maree, T. Alderliesten, P.A.N. Bosman
+> arXiv preprint [arXiv:1907.10988](https://arxiv.org/abs/1907.10988), 2019
+.
 
 
 ---

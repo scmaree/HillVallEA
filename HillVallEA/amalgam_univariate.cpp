@@ -13,7 +13,7 @@ github.com/SCMaree/HillVallEA
 
 
 // init amalgam default parameters
-hillvallea::amalgam_univariate_t::amalgam_univariate_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_t * fitness_function, rng_pt rng) : optimizer_t(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng)
+hillvallea::amalgam_univariate_t::amalgam_univariate_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_pt fitness_function, rng_pt rng) : optimizer_t(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng)
 {
 
   // default values for AMaLGaM
@@ -22,7 +22,7 @@ hillvallea::amalgam_univariate_t::amalgam_univariate_t(const size_t number_of_pa
   st_dev_ratio_threshold = 1.0; 
   distribution_multiplier_decrease = 0.9;
   sample_succes_ratio_threshold = 0.1;
-  param_std_tolerance = 1e-12;   
+  param_std_tolerance = 1e-15; //  1e-15 needed to solve weierstrass! 
   fitness_std_tolerance = 1e-12;
 
   apply_ams = true;

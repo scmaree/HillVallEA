@@ -14,16 +14,117 @@ github.com/SCMaree/HillVallEA
 namespace hillvallea 
 {
 
+  
+  
+  // Normal pdf
+  // returns the value of the pdf at a given point.
+  // assumes all input is of the same dimension as mean.
+  //---------------------------------------------------------------------------
+  
+  
+  // does chol + returns it.
+  double normpdf(const vec_t & mean, const matrix_t & cov, const vec_t & x, matrix_t & chol, matrix_t & inverse_chol)
+  {
+    
+    choleskyDecomposition(cov, chol);
+    int n = (int)cov.rows();
+    inverse_chol.setRaw(matrixLowerTriangularInverse(chol.toArray(), n),n,n);
+    
+    return normpdf(mean,chol,inverse_chol,x);
+    
+  }
+  
+  // use given chol
+  double normpdf(const vec_t & mean, const matrix_t & chol, const matrix_t & inverse_chol, const vec_t & x)
+  {
+    
+    double value = 0.0,
+    chol_determinant = 1.0,
+    dim = (double)mean.size();
+    
+    
+    // compute the determinant of the cholesky factor.
+    for(size_t i = 0; i < dim; ++i)
+      chol_determinant *= chol[i][i];
+    
+    vec_t diff = mean - x;
+    
+    //  exp(-0.5*diff'*inv(cov)*diff) = exp(-0.5*squarednorm(inv(L)*diff) );
+    value = exp(-0.5*inverse_chol.lowerProduct(diff).squaredNorm());
+    
+    // equal to sqrt((2pi)^d * det(cov))
+    value /= pow(2*PI,dim*0.5)*fabs(chol_determinant);
+    
+    return value;
+  }
+  
+  // uses diag(cov) only
+  double normpdf_diagonal(const vec_t & mean, const vec_t & cov_diagonal, const vec_t & x)
+  {
+    
+    double value = 0.0,
+    dim = (double)mean.size(),
+    determinant = 1.0;
+    
+    // difference from mean
+    vec_t diff = x - mean;
+    
+    // create product inv(L)*diff
+    for (size_t i = 0; i < dim; ++i) {
+      diff[i] /= sqrt(cov_diagonal[i]);
+      determinant *= sqrt(cov_diagonal[i]);
+    }
+    
+    value = exp(-0.5*(diff.squaredNorm()));
+    value /= sqrt(pow(2 * PI, dim))*determinant;
+    
+    return value;
+    
+    
+  }
+  
+  double normcdf(double x)
+  {
+    // constants
+    double a1 = 0.254829592;
+    double a2 = -0.284496736;
+    double a3 = 1.421413741;
+    double a4 = -1.453152027;
+    double a5 = 1.061405429;
+    double p = 0.3275911;
+    
+    // Save the sign of x
+    int sign = 1;
+    if (x < 0) {
+      sign = -1;
+    }
+    x = fabs(x) / sqrt(2.0);
+    
+    // A&S formula 7.1.26
+    double t = 1.0 / (1.0 + p*x);
+    double y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*exp(-x*x);
+    
+    return 0.5*(1.0 + sign*y);
+  }
+  
+  
   // sample the parameter from a normal distribution
   // make sure it is within the parameter domain.
   //-------------------------------------------------------------------------
   int sample_normal(vec_t & sample, const size_t problem_size, const vec_t & mean, const matrix_t & MatrixRoot, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng)
   {
+    vec_t sample_transformed;
+    return sample_normal(sample, sample_transformed, problem_size, mean, MatrixRoot, lower_param_range, upper_param_range, rng);
+  }
+  
+  int sample_normal(vec_t & sample, vec_t & z, const size_t problem_size, const vec_t & mean, const matrix_t & MatrixRoot, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng)
+  {
 
     // Sample independent standard normal variables Z = N(0,1)
     std::normal_distribution<double> std_normal(0.0, 1.0);
-    vec_t z(problem_size);
-
+    // vec_t z(problem_size);
+    z.resize(problem_size); // param_transformed
+    
     // try to sample within bounds
     bool sample_in_range = false;
     int attempts = 0;
@@ -611,6 +712,508 @@ namespace hillvallea
 
   // end BLAS / LINPACK library functions
 
+  /**
+   * Selects n points from a set of points. A greedy heuristic is used to find a good
+   * scattering of the selected points. First, a point is selected with a maximum value
+   * in a randomly selected dimension. The remaining points are selected iteratively.
+   * In each iteration, the point selected is the one that maximizes the minimal distance
+   * to thepoints selected so far.
+   */
+  void greedyScatteredSubsetSelection(std::vector<vec_t> & points, size_t number_to_select, std::vector<size_t> & result, rng_pt & rng)
+  {
+    if (points.size() == 0 || number_to_select == 0)  {
+      return;
+    }
+    
+    size_t number_of_points = points.size();
+    size_t number_of_dimensions = points[0].size();
+    
+    std::vector<size_t> indices_left(number_of_points, 0);
+    for (size_t i = 0; i < number_of_points; i++) {
+      indices_left[i] = i;
+    }
+    
+    // the original code gave an error and died. I think this is acceptable as well without exiting.
+    if (number_to_select > number_of_points) {
+      result = indices_left;
+      return;
+    }
+    
+    result.resize(number_to_select);
+    
+    // Find the first point: maximum value in a randomly chosen dimension
+    std::uniform_real_distribution<double> unif(0, 1);
+    size_t random_dimension_index = (size_t)(unif(*rng) * number_of_dimensions);
+    
+    size_t index_of_farthest = 0;
+    double distance_of_farthest = points[indices_left[index_of_farthest]][random_dimension_index];
+    
+    for (size_t i = 1; i < number_of_points; i++)
+    {
+      if (points[indices_left[i]][random_dimension_index] > distance_of_farthest)
+      {
+        index_of_farthest = i;
+        distance_of_farthest = points[indices_left[i]][random_dimension_index];
+      }
+    }
+    
+    size_t number_selected_so_far = 0;
+    result[number_selected_so_far] = indices_left[index_of_farthest];
+    indices_left[index_of_farthest] = indices_left[number_of_points - number_selected_so_far - 1];
+    number_selected_so_far++;
+    
+    /* Then select the rest of the solutions: maximum minimum
+     * (i.e. nearest-neighbour) distance to so-far selected points */
+    
+    vec_t nn_distances(number_of_points, 0.0);
+    
+    for (size_t i = 0; i < number_of_points - number_selected_so_far; i++) {
+      nn_distances[i] = (points[indices_left[i]] - points[result[number_selected_so_far - 1]]).norm();
+    }
+    
+    while (number_selected_so_far < number_to_select)
+    {
+      index_of_farthest = 0;
+      distance_of_farthest = nn_distances[0];
+      for (size_t i = 1; i < number_of_points - number_selected_so_far; i++)
+      {
+        if (nn_distances[i] > distance_of_farthest)
+        {
+          index_of_farthest = i;
+          distance_of_farthest = nn_distances[i];
+        }
+      }
+      
+      result[number_selected_so_far] = indices_left[index_of_farthest];
+      indices_left[index_of_farthest] = indices_left[number_of_points - number_selected_so_far - 1];
+      nn_distances[index_of_farthest] = nn_distances[number_of_points - number_selected_so_far - 1];
+      number_selected_so_far++;
+      
+      double value;
+      for (size_t i = 0; i < number_of_points - number_selected_so_far; i++)
+      {
+        value = (points[indices_left[i]] - points[result[number_selected_so_far - 1]]).norm();
+        if (value < nn_distances[i]) {
+          nn_distances[i] = value;
+        }
+      }
+    }
+    
+  }
+  
+  // push_back exactly 'number_of_solutions_to_select' from 'solutions' to 'selected_solutions', based on a greedy diversity selection
+  // non-const because the random number generator is used.
+  // does not use any members of optimizer_t, and doesn't have to be a member-function therefore.
+  void selectSolutionsBasedOnParameterDiversity(const std::vector<solution_pt> & solutions, size_t number_of_solutions_to_select, std::vector<solution_pt> & selected_solutions, std::vector<solution_pt> & non_selected_solutions, rng_pt & rng)
+  {
+    
+    if(solutions.size() == 0) {
+      return;
+    }
+    
+    // we scale the objectives to the objective ranges before performing subset selection
+    // we also filter out the potential nullptr solutions
+    std::vector<vec_t> parameters;
+    parameters.reserve(solutions.size());
+    std::vector<size_t> non_nullptr_solution_index;
+    non_nullptr_solution_index.reserve(solutions.size());
+    
+    for (size_t i = 0; i < solutions.size(); ++i)
+    {
+      
+      if(solutions[i] != nullptr)
+      {
+        vec_t parameter(solutions[i]->param.size(), 0.0);
+        
+        for (size_t j = 0; j < parameter.size(); ++j) {
+          parameter[j] = solutions[i]->param[j];
+        }
+        parameters.push_back(parameter);
+        non_nullptr_solution_index.push_back(i);
+      }
+    }
+    
+    // Subset Selection
+    std::vector<size_t> selected_indices;
+    selected_indices.reserve(number_of_solutions_to_select);
+    
+    greedyScatteredSubsetSelection(parameters, (int)number_of_solutions_to_select, selected_indices, rng);
+    
+    // Copy to selection
+    std::vector<bool> non_selected_indices(solutions.size(), true);
+    selected_solutions.reserve(selected_solutions.size() + number_of_solutions_to_select);
+    
+    for (size_t i = 0; i < selected_indices.size(); i++) {
+      selected_solutions.push_back(solutions[non_nullptr_solution_index[selected_indices[i]]]);
+      non_selected_indices[non_nullptr_solution_index[selected_indices[i]]] = false;
+    }
+    
+    // Copy non_selected_solutions to the non_selection
+    for (size_t i = 0; i < non_selected_indices.size(); ++i) {
+      if (non_selected_indices[i]) {
+        non_selected_solutions.push_back(solutions[i]);
+      }
+    }
+    
+  }
+  
+  void selectSolutionsBasedOnParameterDiversity(const std::vector<solution_pt> & solutions, size_t number_of_solutions_to_select, std::vector<solution_pt> & selected_solutions, rng_pt & rng)
+  {
+    
+    std::vector<solution_pt> non_selected_solutions;
+    
+    selectSolutionsBasedOnParameterDiversity(solutions, number_of_solutions_to_select, selected_solutions, non_selected_solutions, rng);
+    
+  }
+  
+  // Eigen Decomposition
+  
+  void eigenDecomposition(matrix_t & mat, matrix_t & D, matrix_t & Q)
+  {
+    
+    assert(mat.rows() == mat.cols());
+    int n = (int)mat.rows();
+    
+    double **mat_raw = mat.toArray(); // super nasty code. Allows a const to give a non-const pointer to its data..
+    double **D_raw = D.toArray();
+    double **Q_raw = Q.toArray();
+    
+    eigenDecomposition(mat_raw, n, D_raw, Q_raw);
+    
+    
+  }
+  
+  
+  
+  void eigenDecomposition(double **matrix, int n, double **D, double **Q)
+  {
+    int     i, j;
+    double *rgtmp, *diag;
+    
+    rgtmp = (double *)Malloc(n*sizeof(double));
+    diag = (double *)Malloc(n*sizeof(double));
+    
+    for (i = 0; i < n; i++)
+    {
+      for (j = 0; j <= i; j++)
+      {
+        Q[j][i] = matrix[j][i];
+        Q[i][j] = Q[j][i];
+      }
+    }
+    
+    eigenDecompositionHouseholder2(n, Q, diag, rgtmp);
+    eigenDecompositionQLalgo2(n, Q, diag, rgtmp);
+    
+    for (i = 0; i < n; i++)
+    {
+      for (j = 0; j < n; j++)
+      {
+        D[i][j] = 0.0;
+      }
+      D[i][i] = diag[i];
+    }
+    
+    free(diag);
+    free(rgtmp);
+  }
+  
+  
+  void compute_ranks_desc(const vec_t & vec, vec_t & ranks)
+  {
+    
+    size_t N = vec.size();
+    
+    ranks.resize(N);
+    
+    for (size_t i = 0; i < N; ++i) {
+      ranks[i] = (double) i;
+    }
+    
+    std::sort(std::begin(ranks), std::end(ranks), [&vec](double idx, double idy) { return vec[(size_t) idx] > vec[(size_t) idy]; });
+    
+  }
+  
+  void compute_ranks_asc(const vec_t & vec, vec_t & ranks)
+  {
+    
+    size_t N = vec.size();
+    
+    ranks.resize(N);
+    
+    for (size_t i = 0; i < N; ++i) {
+      ranks[i] = (double)i;
+    }
+    
+    std::sort(std::begin(ranks), std::end(ranks), [&vec](double idx, double idy) { return vec[(size_t)idx] < vec[(size_t)idy]; });
+    
+  }
+  
+  
+  void eigenDecompositionQLalgo2(int n, double **V, double *d, double *e)
+  {
+    int i, k, l, m;
+    double f = 0.0;
+    double tst1 = 0.0;
+    double eps = 2.22e-16; /* Math.pow(2.0,-52.0);  == 2.22e-16 */
+    
+    /* shift input e */
+    for (i = 1; i < n; i++) {
+      e[i - 1] = e[i];
+    }
+    e[n - 1] = 0.0; /* never changed again */
+    
+    for (l = 0; l < n; l++) {
+      
+      /* Find small subdiagonal element */
+      
+      if (tst1 < fabs(d[l]) + fabs(e[l]))
+        tst1 = fabs(d[l]) + fabs(e[l]);
+      m = l;
+      while (m < n) {
+        if (fabs(e[m]) <= eps*tst1) {
+          /* if (fabs(e[m]) + fabs(d[m]+d[m+1]) == fabs(d[m]+d[m+1])) { */
+          break;
+        }
+        m++;
+      }
+      
+      /* If m == l, d[l] is an eigenvalue, */
+      /* otherwise, iterate. */
+      
+      if (m > l) {
+        int iter = 0;
+        do { /* while (fabs(e[l]) > eps*tst1); */
+          double dl1, h;
+          double g = d[l];
+          double p = (d[l + 1] - g) / (2.0 * e[l]);
+          double r = myhypot(p, 1.);
+          
+          iter = iter + 1;  /* Could check iteration count here */
+          
+          /* Compute implicit shift */
+          
+          if (p < 0) {
+            r = -r;
+          }
+          d[l] = e[l] / (p + r);
+          d[l + 1] = e[l] * (p + r);
+          dl1 = d[l + 1];
+          h = g - d[l];
+          for (i = l + 2; i < n; i++) {
+            d[i] -= h;
+          }
+          f = f + h;
+          
+          /* Implicit QL transformation. */
+          
+          p = d[m];
+          {
+            double c = 1.0;
+            double c2 = c;
+            double c3 = c;
+            double el1 = e[l + 1];
+            double s = 0.0;
+            double s2 = 0.0;
+            for (i = m - 1; i >= l; i--) {
+              c3 = c2;
+              c2 = c;
+              s2 = s;
+              g = c * e[i];
+              h = c * p;
+              r = myhypot(p, e[i]);
+              e[i + 1] = s * r;
+              s = e[i] / r;
+              c = p / r;
+              p = c * d[i] - s * g;
+              d[i + 1] = h + s * (c * g + s * d[i]);
+              
+              /* Accumulate transformation. */
+              
+              for (k = 0; k < n; k++) {
+                h = V[k][i + 1];
+                V[k][i + 1] = s * V[k][i] + c * h;
+                V[k][i] = c * V[k][i] - s * h;
+              }
+            }
+            p = -s * s2 * c3 * el1 * e[l] / dl1;
+            e[l] = s * p;
+            d[l] = c * p;
+          }
+          
+          /* Check for convergence. */
+          
+        } while (fabs(e[l]) > eps*tst1);
+      }
+      d[l] = d[l] + f;
+      e[l] = 0.0;
+    }
+    
+    /* Sort eigenvalues and corresponding vectors. */
+#if 1
+    /* TODO: really needed here? So far not, but practical and only O(n^2) */
+    {
+      int j;
+      double p;
+      for (i = 0; i < n - 1; i++) {
+        k = i;
+        p = d[i];
+        for (j = i + 1; j < n; j++) {
+          if (d[j] < p) {
+            k = j;
+            p = d[j];
+          }
+        }
+        if (k != i) {
+          d[k] = d[i];
+          d[i] = p;
+          for (j = 0; j < n; j++) {
+            p = V[j][i];
+            V[j][i] = V[j][k];
+            V[j][k] = p;
+          }
+        }
+      }
+    }
+#endif
+  } /* QLalgo2 */
+  
+  double myhypot(double a, double b)
+  {
+    double r = 0;
+    if (fabs(a) > fabs(b))
+    {
+      r = b / a;
+      r = fabs(a)*sqrt(1 + r*r);
+    }
+    else if (b != 0)
+    {
+      r = a / b;
+      r = fabs(b)*sqrt(1 + r*r);
+    }
+    
+    return r;
+  }
+  
+  void eigenDecompositionHouseholder2(int n, double **V, double *d, double *e)
+  {
+    int i, j, k;
+    
+    for (j = 0; j < n; j++) {
+      d[j] = V[n - 1][j];
+    }
+    
+    /* Householder reduction to tridiagonal form */
+    
+    for (i = n - 1; i > 0; i--) {
+      
+      /* Scale to avoid under/overflow */
+      
+      double scale = 0.0;
+      double h = 0.0;
+      for (k = 0; k < i; k++) {
+        scale = scale + fabs(d[k]);
+      }
+      if (scale == 0.0) {
+        e[i] = d[i - 1];
+        for (j = 0; j < i; j++) {
+          d[j] = V[i - 1][j];
+          V[i][j] = 0.0;
+          V[j][i] = 0.0;
+        }
+      }
+      else {
+        
+        /* Generate Householder vector */
+        
+        double f, g, hh;
+        
+        for (k = 0; k < i; k++) {
+          d[k] /= scale;
+          h += d[k] * d[k];
+        }
+        f = d[i - 1];
+        g = sqrt(h);
+        if (f > 0) {
+          g = -g;
+        }
+        e[i] = scale * g;
+        h = h - f * g;
+        d[i - 1] = f - g;
+        for (j = 0; j < i; j++) {
+          e[j] = 0.0;
+        }
+        
+        /* Apply similarity transformation to remaining columns */
+        
+        for (j = 0; j < i; j++) {
+          f = d[j];
+          V[j][i] = f;
+          g = e[j] + V[j][j] * f;
+          for (k = j + 1; k <= i - 1; k++) {
+            g += V[k][j] * d[k];
+            e[k] += V[k][j] * f;
+          }
+          e[j] = g;
+        }
+        f = 0.0;
+        for (j = 0; j < i; j++) {
+          e[j] /= h;
+          f += e[j] * d[j];
+        }
+        hh = f / (h + h);
+        for (j = 0; j < i; j++) {
+          e[j] -= hh * d[j];
+        }
+        for (j = 0; j < i; j++) {
+          f = d[j];
+          g = e[j];
+          for (k = j; k <= i - 1; k++) {
+            V[k][j] -= (f * e[k] + g * d[k]);
+          }
+          d[j] = V[i - 1][j];
+          V[i][j] = 0.0;
+        }
+      }
+      d[i] = h;
+    }
+    
+    /* Accumulate transformations */
+    
+    for (i = 0; i < n - 1; i++) {
+      double h;
+      V[n - 1][i] = V[i][i];
+      V[i][i] = 1.0;
+      h = d[i + 1];
+      if (h != 0.0) {
+        for (k = 0; k <= i; k++) {
+          d[k] = V[k][i + 1] / h;
+        }
+        for (j = 0; j <= i; j++) {
+          double g = 0.0;
+          for (k = 0; k <= i; k++) {
+            g += V[k][i + 1] * V[k][j];
+          }
+          for (k = 0; k <= i; k++) {
+            V[k][j] -= g * d[k];
+          }
+        }
+      }
+      for (k = 0; k <= i; k++) {
+        V[k][i + 1] = 0.0;
+      }
+    }
+    for (j = 0; j < n; j++) {
+      d[j] = V[n - 1][j];
+      V[n - 1][j] = 0.0;
+    }
+    V[n - 1][n - 1] = 1.0;
+    e[0] = 0.0;
+    
+  }
+
+  
+  
 }
 
 

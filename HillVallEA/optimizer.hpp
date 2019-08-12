@@ -24,7 +24,7 @@ namespace hillvallea
     
     // constructor & destructor
     //--------------------------------------------------------------------------------
-    optimizer_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_t * fitness_function, rng_pt rng);
+    optimizer_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_pt fitness_function, rng_pt rng);
     ~optimizer_t();
 
     // Virtual Functions
@@ -42,7 +42,7 @@ namespace hillvallea
     bool active;
     size_t number_of_parameters;
     vec_t  lower_param_bounds, upper_param_bounds;
-    fitness_t * fitness_function;
+    fitness_pt fitness_function;
     int number_of_generations;
     std::shared_ptr<std::mt19937> rng;
     population_pt pop;
@@ -57,5 +57,5 @@ namespace hillvallea
   };
 
   // initialized optimizers of different types
-  optimizer_pt init_optimizer(const int local_optimizer_index, const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_t * fitness_function, rng_pt rng);
+  optimizer_pt init_optimizer(const int local_optimizer_index, const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_pt fitness_function, rng_pt rng);
 }

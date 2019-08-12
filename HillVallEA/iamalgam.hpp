@@ -23,7 +23,7 @@ namespace hillvallea
 
     // C++ Rule of Three
     //-------------------------------------------
-    iamalgam_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_t * fitness_function, rng_pt rng);
+    iamalgam_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_pt fitness_function, rng_pt rng);
     ~iamalgam_t();
     optimizer_pt clone() const;
 

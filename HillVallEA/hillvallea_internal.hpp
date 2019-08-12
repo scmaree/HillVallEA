@@ -38,13 +38,11 @@ namespace hillvallea {
   class hillvallea_t;
   class optimizer_t;
   class amalgam_t;
+  class hgml_t;
   class amalgam_univariate_t;
   class iamalgam_t;
-  class iamalgam_univariate_t;
-  class cmaes_t;
   class cmsaes_t;
-  class sep_cmaes_t;
-  class gmm_t;
+  class iamalgam_univariate_t;
   class vec_t;
 
   typedef std::shared_ptr<solution_t> solution_pt;
@@ -54,18 +52,16 @@ namespace hillvallea {
   typedef std::shared_ptr<hillvallea_t> hillvallea_pt;
   typedef std::shared_ptr<optimizer_t> optimizer_pt;
   typedef std::shared_ptr<amalgam_t> amalgam_pt;
+  typedef std::shared_ptr<cmsaes_t> cmsaes_pt;
+  typedef std::shared_ptr<hgml_t> hgml_pt;
   typedef std::shared_ptr<amalgam_univariate_t> amalgam_univariate_pt;
   typedef std::shared_ptr<iamalgam_t> iamalgam_pt;
   typedef std::shared_ptr<iamalgam_univariate_t> iamalgam_univariate_pt;
-  typedef std::shared_ptr<cmaes_t> cmaes_pt;
-  typedef std::shared_ptr<sep_cmaes_t> sep_cmaes_pt;
-  typedef std::shared_ptr<cmsaes_t> cmsaes_pt;
   typedef std::mt19937 rng_t;
   typedef std::shared_ptr<std::mt19937> rng_pt;
-  typedef std::shared_ptr<gmm_t> gmm_pt;
 
-  typedef std::function<void(hillvallea::solution_t & sol)> fitness_t;
-
-
+  class fitness_t;
+  typedef std::shared_ptr<fitness_t> fitness_pt;
+  
 }
 

@@ -14,28 +14,47 @@ Example script to demonstrate the usage of HillVallEA
 */
 
 #include "HillVallEA/hillvallea.hpp"
+#include "HillVallEA/fitness.h"
 
-
-// implementation of the Six Hump Camel Back function
-hillvallea::fitness_t sixHumpCamelBack = [](hillvallea::solution_t & sol)
+namespace hillvallea
 {
+class example_problem_t : public fitness_t
+{
+	public:
 
-  // sanity check to see if the objective function is correctly called.
-  assert(sol.param.size() == 2);
-  
-  // fitness function
-  double p0s = sol.param[0]*sol.param[0]; // param 0 squared
-  double p1s = sol.param[1]*sol.param[1]; // param 1 squared
-  
-  sol.f = (4.0-2.1*p0s + p0s*p0s/3.0) * p0s + sol.param[0]*sol.param[1] + (-4.0 + 4.0*p1s)*p1s;
-  
-  // penalty function, if set to > 0, solution is infeasible
-  // (not extensively tested)
-  sol.penalty = 0.0;
+	example_problem_t()
+	{
+	  number_of_parameters = 2;
+	  maximum_number_of_evaluations = 10000;
+	}
+	~example_problem_t() {}
 
+	void get_param_bounds(vec_t & lower, vec_t & upper) const
+	{
+	  lower.resize(number_of_parameters, 0);
+	  upper.resize(number_of_parameters, 0);
+	  
+	  lower[0] = -3.0;
+	  lower[1] = -2.0;
+	  upper[0] = 3.0;
+	  upper[1] = 2.0;
+	}
+
+	void define_problem_evaluation(solution_t & sol)
+	{
+	  double p0s = sol.param[0]*sol.param[0]; // param 0 squared
+	  double p1s = sol.param[1]*sol.param[1]; // param 1 squared
+	  
+	  sol.f = (4.0-2.1*p0s + p0s*p0s/3.0) * p0s + sol.param[0]*sol.param[1] + (-4.0 + 4.0*p1s)*p1s;
+	  sol.penalty = 0.0;
+	}
+
+
+	std::string name() const { return "SixHumpCamelBack"; }
 };
+}
 
-
+	
 // Main: Run the CEC2013 niching benchmark
 //--------------------------------------------------------
 int main(int argc, char **argv)
@@ -44,18 +63,9 @@ int main(int argc, char **argv)
   // Problem definition
   // Note: define as minimization problem!
   //-----------------------------------------
-  size_t number_of_parameters = 2;                               // number of problem variables
-  hillvallea::vec_t lower_range_bounds(number_of_parameters);   // lower variables bounds
-  hillvallea::vec_t upper_range_bounds(number_of_parameters);   // upper variables bounds
-  lower_range_bounds[0] = -3.0;
-  lower_range_bounds[1] = -2.0;
-  upper_range_bounds[0] = 3.0;
-  upper_range_bounds[1] = 2.0;
-  
-  // initialize HillVallEA uniform on the entire search space
-  // decrease if optimum is expected to be in a subspace of the entire search space
-  hillvallea::vec_t lower_init_ranges = lower_range_bounds;
-  hillvallea::vec_t upper_init_ranges = upper_range_bounds;
+  hillvallea::fitness_pt fitness_function = std::make_shared<hillvallea::example_problem_t>();
+  hillvallea::vec_t lower_range_bounds, upper_range_bounds;
+  fitness_function->get_param_bounds(lower_range_bounds, upper_range_bounds);
   
   // HillVallEA Settings
   //-----------------------------------------
@@ -83,11 +93,11 @@ int main(int argc, char **argv)
   // Initialization of HillVallEA
   //-----------------------------------------
   hillvallea::hillvallea_t opt(
-     &sixHumpCamelBack,
-     local_optimizer_index,
-     number_of_parameters,
-     lower_init_ranges,
-     upper_init_ranges,
+     fitness_function,
+     (int) local_optimizer_index,
+     (int) fitness_function->number_of_parameters,
+     lower_range_bounds,
+     upper_range_bounds,
      lower_range_bounds,
      upper_range_bounds,
      maximum_number_of_evaluations,

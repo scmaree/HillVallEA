@@ -23,7 +23,7 @@ namespace hillvallea
   public:
     
     hillvallea_t(
-      fitness_t * fitness_function,
+      fitness_pt fitness_function,
       const int local_optimizer_index,
       const int  number_of_parameters,
       const vec_t & lower_init_ranges,
@@ -43,7 +43,7 @@ namespace hillvallea
 
     // quick constructor
     hillvallea_t(
-      fitness_t * fitness_function,
+      fitness_pt fitness_function,
       const int  number_of_parameters,
       const vec_t & lower_param_bounds,
       const vec_t & upper_param_bounds,
@@ -52,6 +52,11 @@ namespace hillvallea
     );
     
     ~hillvallea_t();
+    
+    fitness_pt fitness_function;
+    int local_optimizer_index;
+    int cluster_alg;
+    void init_default_params();
 
     // Run it!
     //--------------------------------------------------------------------------------
@@ -68,6 +73,7 @@ namespace hillvallea
     int number_of_evaluations_init;
     int number_of_evaluations_clustering;
     int number_of_generations;
+    double selection_fraction_multiplier;
     clock_t starting_time;
 
 
@@ -77,17 +83,28 @@ namespace hillvallea
     double population_size_incrementer;
     double cluster_size_initializer;
     double cluster_size_incrementer;
-    double search_volume;
+    double scaled_search_volume;
     size_t clustering_max_number_of_neighbours;
     double TargetTolFun;
     int add_elites_max_trials;
 
+    // Hill-Valley Test and Clustering
+    //--------------------------------------------------------------------------------
+    void hillvalley_clustering(population_t & pop, std::vector<population_pt> & clusters);
+    bool check_edge(const solution_t & sol1, const solution_t & sol2, int max_trials);
+    bool check_edge(const solution_t & sol1, const solution_t & sol2, int max_trials, std::vector<solution_pt> & test_points);
+
+    // Random number generator
+    // Mersenne twister
+    //------------------------------------
+    std::shared_ptr<std::mt19937> rng;
+    bool write_elitist_archive;
+
+    
   private:
 
     // data members : user settings
     //-------------------------------------------------------------------------------
-    fitness_t * fitness_function; 
-    int local_optimizer_index;
     int  number_of_parameters;
     vec_t  lower_init_ranges;
     vec_t  upper_init_ranges;
@@ -107,7 +124,7 @@ namespace hillvallea
 
     // Run-time functions
     //-------------------------------------------------------------------------------
-    void initialize(population_pt pop, size_t population_size, std::vector<optimizer_pt> & local_optimizers, const std::vector<solution_pt> & elitist_archive);
+    void initialize(population_pt pop, size_t population_size, double selection_fraction_multiplier, std::vector<optimizer_pt> & local_optimizers, const std::vector<solution_pt> & elitist_archive);
     void add_elites_to_archive(std::vector<solution_pt> & elitist_archive, const std::vector<solution_pt> & elite_candidates, int & global_opts_found, int & new_global_opts_found);
     
     // Termination criteria
@@ -120,12 +137,6 @@ namespace hillvallea
     //--------------------------------------------------------------------------------
     population_pt pop;
 
-    // Hill-Valley Test and Clustering
-    //--------------------------------------------------------------------------------
-    void clustering(population_t & pop, std::vector<population_pt> & clusters, const std::vector<solution_pt> & elitist_archive, double & average_edge_length);
-    bool check_edge(const solution_t & sol1, const solution_t & sol2, int max_trials);
-    bool check_edge(const solution_t & sol1, const solution_t & sol2, int max_trials, std::vector<solution_pt> & test_points);
-
     // Output to file
     //-------------------------------------------------------------------------------
     std::ofstream statistics_file;
@@ -137,11 +148,7 @@ namespace hillvallea
     void write_selection_file(population_pt pop, std::vector<optimizer_pt> & local_optimizers) const;
     void write_cluster_population(int generation_nuber, size_t cluster_number, int cluster_generation, population_pt pop) const;
     void write_elitist_archive_file(const std::vector<solution_pt> & elitist_archive, bool final) const;
-
-    // Random number generator
-    // Mersenne twister
-    //------------------------------------
-    std::shared_ptr<std::mt19937> rng;
+    void write_CEC2013_niching_file(bool final);
 
   };
   

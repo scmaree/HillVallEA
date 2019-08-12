@@ -15,24 +15,26 @@ github.com/SCMaree/HillVallEA
 #include "amalgam_univariate.hpp"
 #include "iamalgam.hpp"
 #include "iamalgam_univariate.hpp"
+#include "cmsaes.hpp"
 
-hillvallea::optimizer_pt hillvallea::init_optimizer(const int local_optimizer_index, const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_t * fitness_function, rng_pt rng)
+hillvallea::optimizer_pt hillvallea::init_optimizer(const int local_optimizer_index, const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_pt fitness_function, rng_pt rng)
 {
 
   // parse settings
   switch (local_optimizer_index)
   {
-  case 0: return std::make_shared<amalgam_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
-  case 1: return std::make_shared<amalgam_univariate_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
-  case 20: return std::make_shared<iamalgam_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
-  case 21: return std::make_shared<iamalgam_univariate_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
-  default: return std::make_shared<amalgam_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
+    case 0: return std::make_shared<amalgam_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
+    case 1: return std::make_shared<amalgam_univariate_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
+    case 10: return std::make_shared<cmsaes_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
+    case 20: return std::make_shared<iamalgam_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
+    case 21: return std::make_shared<iamalgam_univariate_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
+    default: return std::make_shared<amalgam_t>(number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng); break;
   }
 
 }
 
 // initialization of the general parameters of the EDAs
-hillvallea::optimizer_t::optimizer_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_t * fitness_function, rng_pt rng)
+hillvallea::optimizer_t::optimizer_t(const size_t number_of_parameters, const vec_t & lower_param_bounds, const vec_t & upper_param_bounds, double init_univariate_bandwidth, fitness_pt fitness_function, rng_pt rng)
 {
 
   active = true;

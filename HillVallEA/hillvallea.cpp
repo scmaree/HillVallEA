@@ -12,12 +12,14 @@ github.com/SCMaree/HillVallEA
 #include "hillvallea.hpp"
 #include "population.hpp"
 #include "mathfunctions.hpp"
+#include "fitness.h"
+#include "hgml.hpp"
 
 namespace hillvallea
 {
   // Constructor
   hillvallea_t::hillvallea_t(
-    fitness_t * fitness_function,
+    fitness_pt fitness_function,
     const int local_optimizer_index,
     const int  number_of_parameters,
     const vec_t & lower_init_ranges,
@@ -57,27 +59,13 @@ namespace hillvallea
     rng = std::make_shared<std::mt19937>((unsigned long)(random_seed));
     std::uniform_real_distribution<double> unif(0, 1);
 
-    // Parameters of the recursion scheme
-    //---------------------------------------------
-    population_size_initializer = 6.0;
-    population_size_incrementer = 2.0;
-    cluster_size_initializer = 1.0;
-    cluster_size_incrementer = 1.2;
-    add_elites_max_trials = 5;
-
-    search_volume = 1.0;
-    for (int i = 0; i < number_of_parameters; ++i) {
-      search_volume *= (upper_init_ranges[i] - lower_init_ranges[i]);
-    }
-
-    clustering_max_number_of_neighbours = (size_t)(number_of_parameters + 1);
-    TargetTolFun = 1e-5;
+    init_default_params();
   }
 
 
   // Quick Constructor
   hillvallea_t::hillvallea_t(
-    fitness_t * fitness_function,
+    fitness_pt fitness_function,
     const int  number_of_parameters,
     const vec_t & lower_param_bounds,
     const vec_t & upper_param_bounds,
@@ -88,6 +76,7 @@ namespace hillvallea
 
     // copy all settings
     this->fitness_function = fitness_function;
+    this->cluster_alg = 0;
     this->local_optimizer_index = 1; // default: AMu
     this->number_of_parameters = number_of_parameters;
     this->lower_init_ranges = lower_param_bounds; // init range == bounds
@@ -107,27 +96,44 @@ namespace hillvallea
     rng = std::make_shared<std::mt19937>((unsigned long)(random_seed));
     std::uniform_real_distribution<double> unif(0, 1);
 
-    // Parameters of the recursion scheme
-    //---------------------------------------------
-    population_size_initializer = 6.0;
-    population_size_incrementer = 2.0;
-    cluster_size_initializer = 1.0;
-    cluster_size_incrementer = 1.2;
-    add_elites_max_trials = 5;
-
-    search_volume = 1.0;
-    for (int i = 0; i < number_of_parameters; ++i) {
-      search_volume *= (upper_init_ranges[i] - lower_init_ranges[i]);
-    }
-
-    clustering_max_number_of_neighbours = (size_t)(number_of_parameters + 1);
-    TargetTolFun = 1e-5;
+    init_default_params();
   }
 
 
   hillvallea_t::~hillvallea_t()
   {
 
+  }
+  
+  void hillvallea_t::init_default_params()
+  {
+    // Parameters of the recursion scheme
+    //---------------------------------------------
+    population_size_initializer = 6.0;
+    population_size_incrementer = 2.0;
+    cluster_size_initializer = 0.8;
+    cluster_size_incrementer = 1.1;
+    add_elites_max_trials = 5;
+    selection_fraction_multiplier = 1.0; // this doesn't make things better, disabled it.
+    
+    TargetTolFun = 1e-5;
+    
+    scaled_search_volume = 1.0; // reduces round-off errors and +inf errors for large number_of_parameters;
+    for(size_t i = 0; i < upper_init_ranges.size(); ++i) {
+      scaled_search_volume *= pow((upper_init_ranges[i] - lower_init_ranges[i]),1.0/number_of_parameters);
+    }
+    write_elitist_archive = false;
+    clustering_max_number_of_neighbours = (size_t)(number_of_parameters + 1);
+    /*
+    // such that for d={1,2} still Nn = d+1
+    if( number_of_parameters <= 3 ) {
+      clustering_max_number_of_neighbours = number_of_parameters + 1;
+    }
+    else {
+      clustering_max_number_of_neighbours = 3 + log(number_of_parameters);
+    }
+    */
+    
   }
 
   // Write statistic Files
@@ -305,6 +311,42 @@ namespace hillvallea
       file << std::endl;
     }
   }
+  
+  void hillvallea_t::write_CEC2013_niching_file(bool final)
+  {
+    
+    std::string filename;
+    if(final) {
+      std::stringstream ss;
+      ss << write_directory << "niching_archive_core" << local_optimizer_index << "_cluster" << cluster_alg << "_" << fitness_function->name() << "_run" << std::setw(3) << std::setfill('0') << random_seed << "_final.dat";
+      filename = ss.str();
+      
+      filename = write_directory + "niching_archive" + file_appendix + ".dat";
+    }
+    else
+    {
+      std::stringstream ss;
+      ss << write_directory << "niching_archive_core" << local_optimizer_index << "_cluster" << cluster_alg << "_" << fitness_function->name() << "_run" << std::setw(3) << std::setfill('0') << random_seed << "_" << number_of_generations <<".dat";
+      filename = ss.str();
+    }
+    
+    std::ofstream file;
+    file.open(filename, std::ofstream::out | std::ofstream::trunc);
+    assert(file.is_open());
+    
+    int precision = std::numeric_limits<long double>::digits10 + 1;
+    
+    for (size_t i = 0; i < elitist_archive.size(); ++i) {
+      file
+      << std::fixed << std::setw(precision + 5) << std::setprecision(precision + 1) << elitist_archive[i]->param << " = "
+      << std::fixed << std::setw(precision + 5) << std::setprecision(precision + 1) << elitist_archive[i]->f << " @ "
+      << std::fixed << std::setw(precision + 5) << elitist_archive[i]->feval_obtained << " "
+      << std::fixed << std::setw(precision + 5) << std::setprecision(precision + 1) << elitist_archive[i]->time_obtained;
+      
+      file << std::endl;
+    }
+    
+  }
 
   // Termination Criteria
   //-------------------------------------------------------------------------------
@@ -331,7 +373,7 @@ namespace hillvallea
     double distance_to_nearest_elite = 1e300;
     double distance;
     double best_fitness_so_far = local_optimizer.pop->sols[0]->f;
-    double TargetTolFun = 1e-5;
+    // double TargetTolFun = 1e-5;
     if (elitist_archive.size() > 0)
     {
       // find the nearest elite
@@ -468,7 +510,7 @@ namespace hillvallea
 
   //----------------------------------------------------------------------------------------------
   // samples an initial population uniformly random, clusters it into a set of local_optimizers
-  void hillvallea_t::initialize(population_pt pop, size_t population_size, std::vector<optimizer_pt> & local_optimizers, const std::vector<solution_pt> & elitist_archive)
+  void hillvallea_t::initialize(population_pt pop, size_t population_size, double selection_fraction_multiplier, std::vector<optimizer_pt> & local_optimizers, const std::vector<solution_pt> & elitist_archive)
   {
 
     // Initialize running parameters of hillvallea
@@ -478,8 +520,14 @@ namespace hillvallea
     // initially, we create a single cluster that we initialize by uniform sampling
     //-------------------------------------------------------------------------------------------------------------
     std::vector<solution_pt> backup_sols = pop->sols;
-    pop->fill_uniform(population_size, number_of_parameters, lower_init_ranges, upper_init_ranges, rng);
+    // pop->fill_uniform(population_size, number_of_parameters, lower_init_ranges, upper_init_ranges, rng);
 
+    
+    double sample_ratio = 2.0;
+    // pop->fill_greedy_uniform(population_size, number_of_parameters, sample_ratio, lower_init_ranges, upper_init_ranges, rng);
+    
+    pop->fill_with_rejection(population_size, number_of_parameters, sample_ratio, backup_sols, lower_init_ranges, upper_init_ranges, rng);
+    
     {
       int fevals = pop->evaluate(this->fitness_function, 0); // no elite yet.
       number_of_evaluations += fevals;
@@ -489,22 +537,48 @@ namespace hillvallea
     pop->sort_on_fitness();
 
     // create a dummy local_optimizer for the initial population so that we can perform selection and we can write it down.
-    double init_univariate_bandwidth = 1.0;
+    double init_univariate_bandwidth = scaled_search_volume * pow(pop->size(), -1.0/number_of_parameters);
     optimizer_pt local_optimizer = init_optimizer(local_optimizer_index, number_of_parameters, lower_param_bounds, upper_param_bounds, init_univariate_bandwidth, fitness_function, rng);
     local_optimizer->initialize_from_population(pop);
 
     population_pt selection = std::make_shared<population_t>();
-    local_optimizer->pop->truncation_percentage(*selection, local_optimizer->selection_fraction);
+    local_optimizer->pop->truncation_percentage(*selection, local_optimizer->selection_fraction * selection_fraction_multiplier);
 
     // Hill-Valley Clustering
     // note: i init the univariate bandwidth base don the average edge length.. so this is correct here :)
     //------------------------------------------------
     std::vector<population_pt> clusters;
-
-    clustering(*selection, clusters, elitist_archive, init_univariate_bandwidth);
-
+    
+    if(cluster_alg == 1)
+    {
+      hgml_t hgml;
+      hgml.hierarchical_clustering(*selection, clusters);
+    }
+    else
+    if(cluster_alg == 2)
+    {
+      hgml_t hgml;
+      hgml.nearest_better_clustering(*selection, clusters);
+    }
+    else
+    {
+      // add elites to the selection, and mark them as elite
+      if (elitist_archive.size() > 0)
+      {
+        for (size_t i = 0; i < elitist_archive.size(); ++i)
+        {
+          elitist_archive[i]->elite = true;
+          selection->sols.push_back(std::make_shared<solution_t>(*elitist_archive[i]));
+        }
+        selection->sort_on_fitness();
+      }
+      
+      hillvalley_clustering(*selection, clusters);
+    }
+    
     // Init local optimizers
     //---------------------------------------------------------------------------
+    init_univariate_bandwidth = scaled_search_volume * pow(selection->size(), -1.0/number_of_parameters);
     for (auto cluster = clusters.begin(); cluster != clusters.end(); ++cluster)
     {
       if ((*cluster)->sols.size() > 0)
@@ -530,6 +604,36 @@ namespace hillvallea
 
   void hillvallea_t::run()
   {
+    
+    // ugly hack to prevent CPU burning in CEC problems
+    // this is only used to terminate when the elitist archive
+    // contains this many solutions. We dot not actually check
+    // whether the solutions are distinct global optima
+    // (but they will be, trust me)
+    //---------------------------------------------------
+    vec_t number_of_optima(20,0.0);
+    number_of_optima[0] = 2;
+    number_of_optima[1] = 5;
+    number_of_optima[2] = 1;
+    number_of_optima[3] = 4;
+    number_of_optima[4] = 2;
+    number_of_optima[5] = 18;
+    number_of_optima[6] = 36;
+    number_of_optima[7] = 81;
+    number_of_optima[8] = 216;
+    number_of_optima[9] = 12;
+    number_of_optima[10] = 6;
+    number_of_optima[11] = 8;
+    number_of_optima[12] = 6;
+    number_of_optima[13] = 6;
+    number_of_optima[14] = 8;
+    number_of_optima[15] = 6;
+    number_of_optima[16] = 8;
+    number_of_optima[17] = 6;
+    number_of_optima[18] = 8;
+    number_of_optima[19] = 8;
+    
+    
 
     //---------------------------------------------
     // reset all runlogs (in case hillvallea is run multiple time)
@@ -551,8 +655,10 @@ namespace hillvallea
 
     // Init population sizes
     //---------------------------------------------
-    double current_population_size = number_of_parameters * pow(2.0, population_size_initializer);
+    double current_population_size = pow(2.0, population_size_initializer);
     double current_cluster_size;
+    double current_selection_fraction_multiplier = 1.0;
+    
     {
       hillvallea::optimizer_pt dummy_optimizer = init_optimizer(local_optimizer_index, number_of_parameters, lower_param_bounds, upper_param_bounds, 1.0, fitness_function, rng);
       current_cluster_size = cluster_size_initializer *dummy_optimizer->recommended_popsize(number_of_parameters);
@@ -579,20 +685,39 @@ namespace hillvallea
         restart = false;
         break;
       }
-
+      
+      for (size_t problem = 1; problem <= 20; problem++)
+      {
+        std::stringstream ss;
+        ss << "CEC2013_p" << problem;
+        if(fitness_function->name().compare(ss.str()) == 0)
+        {
+          if(elitist_archive.size() == number_of_optima[problem-1]) {
+            restart = false;
+            break;
+          }
+        }
+        
+        if(!restart) {
+          break;
+        }
+      }
+      
       // compute initial population
-      initialize(pop, (size_t) current_population_size, local_optimizers, elitist_archive);
+      initialize(pop, (size_t) current_population_size, current_selection_fraction_multiplier, local_optimizers, elitist_archive);
       
       // we only create local optimizers from the global opts
       // so the local optimizer still inits new global opts
       // therefore, this is basically never hit.
       if (local_optimizers.size() == 0) 
       {
-        current_population_size *= population_size_incrementer*population_size_incrementer;
+        current_population_size *= population_size_incrementer * population_size_incrementer;
+        current_selection_fraction_multiplier *= selection_fraction_multiplier;
         number_of_generations_without_new_clusters++;
         
         if (number_of_generations_without_new_clusters == 3) {
           restart = false;
+          std::cout << "unfinished. ";
           break;
         }
         else {
@@ -686,21 +811,11 @@ namespace hillvallea
             local_optimizers[i]->pop->truncation_percentage(*local_optimizers[i]->pop, local_optimizers[i]->selection_fraction);
             local_optimizers[i]->average_fitness_history.push_back(local_optimizers[i]->pop->average_fitness());
 
-            //if (write_generational_solutions) {
-            //  write_cluster_selection(number_of_generations, i, local_optimizers[i]->number_of_generations, local_optimizers[i]->pop);
-            //}
-            
             if (write_generational_statistics) {
-              write_statistics_line_cluster(*local_optimizers[i]->pop, i, local_optimizers[i]->number_of_generations, local_optimizers, elitist_archive);
+              write_statistics_line_cluster(*local_optimizers[i]->pop, (int) i, local_optimizers[i]->number_of_generations, local_optimizers, elitist_archive);
             }
           }
         }
-      }
-
-
-      // write elitist_archive of this generation.
-      if (write_generational_solutions) {
-        write_elitist_archive_file(elitist_archive, false);
       }
 
       // check if the elites are novel and add the to the archive. 
@@ -708,11 +823,22 @@ namespace hillvallea
       int number_of_global_opts_found = -1;
       add_elites_to_archive(elitist_archive, elite_candidates, number_of_global_opts_found, number_of_new_global_opts_found);
 
+      
+      // write elitist_archive of this generation.
+      if (write_generational_solutions) {
+        write_elitist_archive_file(elitist_archive, false);
+      }
+      
+      if(write_elitist_archive) {
+        write_CEC2013_niching_file(false);
+      }
+      
       // if we found no new global opt, this is either due to the fact that there are no new basins found, 
       // or cuz the cluser size is too small.  increase both
       if (number_of_new_global_opts_found == 0) {
         current_cluster_size *= cluster_size_incrementer;
         current_population_size *= population_size_incrementer;
+        current_selection_fraction_multiplier *= current_selection_fraction_multiplier;
       }
       number_of_generations++;
 
@@ -728,7 +854,11 @@ namespace hillvallea
     if (write_generational_statistics || write_generational_solutions) {
       write_elitist_archive_file(elitist_archive, true);
     }
-
+    
+    if (write_elitist_archive) {
+      write_CEC2013_niching_file(true);
+    }
+    
     if (write_generational_statistics) {
       close_statistics_file();
     }
@@ -783,11 +913,28 @@ namespace hillvallea
 
       // check if the potential global optima is novel
       bool novel = true;
-
-      for (size_t j = 0; j < elitist_archive.size(); ++j)
+      
+      if (elitist_archive.size() > 0)
       {
+        size_t nearest_elite = 0;
+        double nearest_dist = 1e300;
+        double current_dist = 0;
+        
+        for (size_t j = 0; j < elitist_archive.size(); ++j)
+        {
 
-        // a valid edge (check_edge returns true) suggest that the two optima are the same. 
+          current_dist = elitist_archive[j]->param_distance(*potential_candidates[i]);
+          
+          if(current_dist < nearest_dist)
+          {
+            nearest_dist = current_dist;
+            nearest_elite = j;
+          }
+        }
+      
+        size_t j = nearest_elite; // lazy : re-using code..
+      
+        // a valid edge (check_edge returns true) suggest that the two optima are the same.
         if (check_edge(*elitist_archive[j], *potential_candidates[i], add_elites_max_trials))
         {
           novel = false;
@@ -802,7 +949,7 @@ namespace hillvallea
             elitist_archive[j]->generation_obtained = potential_candidates[i]->generation_obtained;
           }
 
-          break;
+          // break;
         }
       }
 
@@ -834,6 +981,10 @@ bool hillvallea::hillvallea_t::check_edge(const hillvallea::solution_t &sol1, co
 bool hillvallea::hillvallea_t::check_edge(const hillvallea::solution_t &sol1, const hillvallea::solution_t &sol2, int max_trials, std::vector<solution_pt> & test_points)
 {
 
+  if (sol1.param_distance(sol2) == 0) {
+    return true;
+  }
+  
   // elites are already checked to be in different basins
   if (sol1.elite && sol2.elite) {
     return false;
@@ -856,11 +1007,11 @@ bool hillvallea::hillvallea_t::check_edge(const hillvallea::solution_t &sol1, co
   for (size_t k = 0; k < max_trials; k++)
   {
 
-    solution_pt x_test = std::make_shared<solution_t>();
+    solution_pt x_test = std::make_shared<solution_t>(sol1.param.size());
 
     x_test->param = sol1.param + ((k + 1.0) / (max_trials + 1.0)) * (sol2.param - sol1.param);
 
-    (*fitness_function)(*x_test);
+    fitness_function->evaluate(x_test);
     number_of_evaluations++;
     number_of_evaluations_clustering++;
 
@@ -876,7 +1027,7 @@ bool hillvallea::hillvallea_t::check_edge(const hillvallea::solution_t &sol1, co
 
 }
 
-void hillvallea::hillvallea_t::clustering(population_t & pop, std::vector<population_pt> & clusters, const std::vector<solution_pt> & elitist_archive, double & average_edge_length)
+void hillvallea::hillvallea_t::hillvalley_clustering(population_t & pop, std::vector<population_pt> & clusters)
 {
 
   // reset all clusters
@@ -885,17 +1036,6 @@ void hillvallea::hillvallea_t::clustering(population_t & pop, std::vector<popula
   // exclude the trivial case
   if (pop.size() == 0) {
     return;
-  }
-
-  // add elites to the archive, and mark them as elite
-  if (elitist_archive.size() > 0)
-  {
-    for (size_t i = 0; i < elitist_archive.size(); ++i)
-    {
-      elitist_archive[i]->elite = true;
-      pop.sols.push_back(std::make_shared<solution_t>(*elitist_archive[i]));
-    }
-    pop.sort_on_fitness();
   }
 
 
@@ -908,7 +1048,7 @@ void hillvallea::hillvallea_t::clustering(population_t & pop, std::vector<popula
   // remember how many solutions in the population created, so that we can allocate them later. 
   std::vector<solution_pt> test_points;
   std::vector<size_t> cluster_index_of_test_points;
-  average_edge_length = pow(search_volume / pop.size(), 1.0 / number_of_parameters);
+  double average_edge_length = scaled_search_volume * pow(pop.size(), -1.0/number_of_parameters);
   double* dist = (double *)Malloc((long)pop.size() * sizeof(double));
 
   for (size_t i = 1; i < pop.size(); i++)
@@ -968,8 +1108,13 @@ void hillvallea::hillvallea_t::clustering(population_t & pop, std::vector<popula
 
       int max_number_of_trial_solutions = 1 + ((int)(dist[nearest_better_index] / average_edge_length));
       std::vector<solution_pt> new_test_points;
-
-      if (check_edge(*pop.sols[i], *pop.sols[nearest_better_index], max_number_of_trial_solutions, new_test_points))
+      bool force_accept = false;
+      
+      if(i > 0.5 * pop.size() && max_number_of_trial_solutions == 1) {
+        force_accept = true;
+      }
+      
+      if (force_accept || check_edge(*pop.sols[i], *pop.sols[nearest_better_index], max_number_of_trial_solutions, new_test_points))
       {
         cluster_index[i] = cluster_index[nearest_better_index];
         edge_added = true;
@@ -1025,6 +1170,7 @@ void hillvallea::hillvallea_t::clustering(population_t & pop, std::vector<popula
 
   for (size_t i = 0; i < cluster_index.size(); ++i) {
     candidate_clusters[cluster_index[i]]->sols.push_back(pop.sols[i]);
+    pop.sols[i]->cluster_number = (int) cluster_index[i];
 
     // only if the elite is the best of that population, we do not run it again.
     // don't get confused by this. We disable the cluster as soon as the first solution is an elite. 

@@ -15,15 +15,23 @@ github.com/SCMaree/HillVallEA
 
 namespace hillvallea
 {
-  
-  class population_t;
 
+  // Normal pdf
+  // returns the value of the pdf at a given point.
+  // assumes all input is of the same dimension as mean.
+  //---------------------------------------------------------------------------
+  double normpdf(const vec_t & mean, const matrix_t & cov, const vec_t & x, matrix_t & chol, matrix_t & inverse_chol);
+  double normpdf(const vec_t & mean, const matrix_t & chol, const matrix_t & inverse_chol, const vec_t & x);
+  double normpdf_diagonal(const vec_t & mean, const vec_t & cov_diagonal, const vec_t & x);           // uses diag(cov) only
+  double normcdf(const double x);
+  
   // sample parameters using normal distribution
   // returns the number of trials before an in-range sample is found.
   // on too many fails, sample uniform.
   //----------------------------------------------
   int sample_normal(vec_t & sample, const size_t problem_size, const vec_t & mean, const matrix_t & chol, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng);
   int sample_normal_univariate(vec_t & sample, const size_t problem_size, const vec_t & mean, const matrix_t & chol, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng);
+  int sample_normal(vec_t & sample, vec_t & sample_transformed, const size_t problem_size, const vec_t & mean, const matrix_t & chol, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng);
 
   void sample_uniform(vec_t & sample, const size_t problem_size, const vec_t & lower_user_range, const vec_t & upper_user_range,  rng_pt rng);
   
@@ -49,5 +57,29 @@ namespace hillvallea
   double **choleskyDecomposition(double **matrix, int n);
   int linpackDTRDI(double t[], int ldt, int n);
   double **matrixLowerTriangularInverse(double **matrix, int n);
+  
+  
+  /**
+   * Selects n points from a set of points. A greedy heuristic is used to find a good
+   * scattering of the selected points. First, a point is selected with a maximum value
+   * in a randomly selected dimension. The remaining points are selected iteratively.
+   * In each iteration, the point selected is the one that maximizes the minimal distance
+   * to the points selected so far.
+   */
+  void greedyScatteredSubsetSelection(std::vector<vec_t> & points, size_t number_to_select, std::vector<size_t> & selected_indices, rng_pt & rng);
+
+  void selectSolutionsBasedOnParameterDiversity(const std::vector<solution_pt> & solutions, size_t number_of_solutions_to_select, std::vector<solution_pt> & selected_solutions, std::vector<solution_pt> & non_selected_solutions, rng_pt & rng);
+  void selectSolutionsBasedOnParameterDiversity(const std::vector<solution_pt> & solutions, size_t number_of_solutions_to_select, std::vector<solution_pt> & selected_solutions, rng_pt & rng);
+
+  // Eigenvalue functions (for cma-es / rs-cmsa)
+  void eigenDecompositionHouseholder2(int n, double **V, double *d, double *e);
+  double myhypot(double a, double b);
+  void eigenDecompositionQLalgo2(int n, double **V, double *d, double *e);
+  
+  void eigenDecomposition(matrix_t & mat, matrix_t & D, matrix_t & Q);
+  void eigenDecomposition(double **matrix, int n, double **D, double **Q);
+  
+  void compute_ranks_desc(const vec_t & vec, vec_t & ranks);
+  void compute_ranks_asc(const vec_t & vec, vec_t & ranks);
   
 }

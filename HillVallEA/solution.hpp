@@ -34,10 +34,21 @@ namespace hillvallea
     vec_t param;            // position of the solution, i.e., the coordinate vector
     double f;               // fitness value
     double penalty;         // penalty value ( set to > 0 if the solution is infeasible )
-
+    int cluster_number;
+    
+    vec_t param_transformed; // for CMSA-ES
+    double multiplier;      // for CMSA-ES
+    double NormTabDis;      // for RS-CMSA
+    
     // Register solution as elite in Hill-Valley Clustering
     //-----------------------------------------
-    bool elite; 
+    bool elite;
+    
+    // for HGML
+    //-----------------------------------------
+    double probability;    // for spearman rank correlation
+    int fitness_rank;      // for spearman rank correlation
+    int probability_rank;  // for spearman rank correlation
 
     // for performance logging of elites
     //-----------------------------------------
@@ -49,11 +60,12 @@ namespace hillvallea
     //-----------------------------------------
     static bool better_solution_via_pointers(const solution_pt sol1, const solution_pt sol2);
     static bool better_solution(const solution_t & sol1, const solution_t & sol2);
+    static bool higher_probability(const std::shared_ptr<solution_t> sol1, const std::shared_ptr<solution_t> sol2);
     
     // distance to another solution in parameter space
     //-----------------------------------------
-    double param_distance(solution_t & sol2) const;
-    double param_distance(vec_t & param2) const;
+    double param_distance(const solution_t & sol2) const;
+    double param_distance(const vec_t & param2) const;
     
   };
 

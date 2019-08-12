@@ -21,26 +21,37 @@ namespace hillvallea
     time_obtained = 0;
     feval_obtained = 0;
     generation_obtained = 0;
+    cluster_number = -1;
+    multiplier = 1.0;
+    NormTabDis = 0.0;
   }
 
   solution_t::solution_t(size_t problem_size)
   {
     param.resize(problem_size,0.0);
+    this->param_transformed.resize(problem_size, 0.0);
     penalty = 0.0;
     elite = false;
     time_obtained = 0;
     feval_obtained = 0;
     generation_obtained = 0;
+    cluster_number = -1;
+    multiplier = 1.0;
+    NormTabDis = 0.0;
   }
   
   solution_t::solution_t(vec_t param)
   {
     penalty = 0.0;
     this->param = param;
+    this->param_transformed.resize(this->param.size(), 0.0);
     elite = false;
     time_obtained = 0;
     feval_obtained = 0;
     generation_obtained = 0;
+    cluster_number = -1;
+    multiplier = 1.0;
+    NormTabDis = 0.0;
   }
   
   solution_t::solution_t(const solution_t & other)
@@ -54,6 +65,10 @@ namespace hillvallea
     this->time_obtained = other.time_obtained;
     this->feval_obtained = other.feval_obtained;
     this->generation_obtained = other.generation_obtained;
+    this->cluster_number = other.cluster_number;
+    this->multiplier = other.multiplier;
+    this->param_transformed = other.param_transformed;
+    this->NormTabDis = other.NormTabDis;
   
   }
   
@@ -89,14 +104,22 @@ namespace hillvallea
     }
   }
   
+  // has sol1 a higher sample probability than sol2?
+  // defined as static!
+  bool solution_t::higher_probability(const std::shared_ptr<solution_t> sol1, const std::shared_ptr<solution_t> sol2)
+  {
+    return (sol1->probability > sol2->probability);
+  }
+  
+  
   // computes the distance to another solution
   //------------------------------------------------------------------------------------
-  double solution_t::param_distance(solution_t & sol2) const
+  double solution_t::param_distance(const solution_t & sol2) const
   {
     return (this->param - sol2.param).norm();
   }
 
-  double solution_t::param_distance(vec_t & param2) const
+  double solution_t::param_distance(const vec_t & param2) const
   {
     return (this->param - param2).norm();
   }

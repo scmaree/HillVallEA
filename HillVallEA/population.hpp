@@ -38,6 +38,8 @@ namespace hillvallea
     // initialization
     //------------------------------------------
     void fill_uniform(const size_t sample_size, const size_t problem_size, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng);
+    void fill_greedy_uniform(const size_t sample_size, const size_t problem_size, double sample_ratio, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng);
+    void fill_with_rejection(const size_t sample_size, const size_t problem_size, double sample_ratio, const std::vector<solution_pt> & previous_sols, const vec_t & lower_param_range, const vec_t & upper_param_range, rng_pt rng);
     int fill_normal(const size_t sample_size, const size_t problem_size, const vec_t & mean, const matrix_t & MatrixRoot, const vec_t & lower_param_range, const vec_t & upper_param_range, const size_t number_of_elites, rng_pt rng);
     int fill_normal_univariate(const size_t sample_size, const size_t problem_size, const vec_t & mean, const matrix_t & cholesky, const vec_t & lower_param_range, const vec_t & upper_param_range, const size_t number_of_elites, rng_pt rng);
 
@@ -49,13 +51,14 @@ namespace hillvallea
     // Maximum likelihood estimation of mean and covariance
     //-------------------------------------------
     void mean(vec_t & mean) const;
+    void weighted_mean(vec_t & mean, const vec_t & weights) const;
     void covariance(const vec_t & mean, matrix_t & covariance) const;
     void covariance_univariate(const vec_t & mean, matrix_t & covariance) const;
 
     // evaluate all solution in the population
     // returns the number of evaluations
     //------------------------------------------
-    int evaluate(const fitness_t * fitness_function, const size_t skip_number_of_elites);
+    int evaluate(const fitness_pt fitness_function, const size_t skip_number_of_elites);
 
     // Selection
     //------------------------------------------
